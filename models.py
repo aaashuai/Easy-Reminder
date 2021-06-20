@@ -1,15 +1,16 @@
 from peewee import SqliteDatabase, Model, CharField, IntegerField, TextField
 
-from typevar import JobState, JobType
+from typevar import JobState
 
 db = SqliteDatabase('wxbot.db')
 
 
 class TableScheduleJob(Model):
     id = IntegerField(index=True, primary_key=True)
+    room_id = IntegerField(index=True, help_text="群聊ID")
     name = CharField(index=True, help_text="任务名称")
     next_run_time = IntegerField(help_text="下一次执行时间")
-    type = IntegerField(choices=JobType, help_text="任务类型")
+    schedule_info = CharField(null=True, help_text="周期类型或天数")
     state = IntegerField(default=JobState.ready, choices=JobState, help_text="任务执行状态")
     remind_msg = TextField(help_text="定时提醒内容")
 

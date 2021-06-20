@@ -12,7 +12,7 @@ logging_config = {
     "formatters": {
         "default": {
             "class": "logging.Formatter",
-            'format': '+ %(asctime)s.%(msecs)03dZ %(levelname)s <%(module)s> {%(requestid)s} | %(lineno)d %(message)s',
+            'format': '+ %(asctime)s.%(msecs)03dZ %(levelname)s <%(module)s> | %(lineno)d %(message)s',
             'datefmt': '%Y-%m-%dT%H:%M:%S',
         },
     },
