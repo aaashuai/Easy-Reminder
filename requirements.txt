@@ -2,3 +2,5 @@ peewee==3.14.4
 wechaty==0.8.11
 pydantic==1.8.2
 recognizers-number==1.0.0a3
+python-dotenv==0.17.1
+python-dateutil==2.8.1
