@@ -6,7 +6,7 @@
     在.env中
     1. 配置机器人ID(可先通过一次对话获取)
     2. 配置TOKEN
-    3. 配置
+    3. 配置 WECHATY_PUPPET_SERVICE_ENDPOINT
 3. 使用方式  [todo: 将基本框架提取出来，用户可以通过@command来注册命令并执行]
     1. <all tasks> 展示当前生效中的任务
     2. <help,cmd>  查看该命令使用方法
