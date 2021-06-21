@@ -1,14 +1,12 @@
 import asyncio
 import functools
 import inspect
-import os
 import time
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 from dotenv import load_dotenv
 from wechaty import Wechaty, Room, Message, WechatyOptions
-from wechaty_puppet import FileBox
 
 from dao import ScheduleJobDao
 from logger import logger
@@ -17,8 +15,6 @@ from typevar import JobScheduleType
 from utils import TimeUtil, NerUtil
 
 load_dotenv()
-
-SELF_ID = os.environ.get("SELF_ID")  # 机器人 ID
 
 
 def command(arg):
@@ -97,11 +93,7 @@ class ReminderBot(Wechaty):
         )
         reminder_room = await self.Room.find(room_id)
         ScheduleJobDao.job_done(job_id)
-        send_msg = (
-            f"{TimeUtil.now_datetime_str()}\n"
-            f"内容:\n"
-            f"{remind_msg}"
-        )
+        send_msg = f"{TimeUtil.now_datetime_str()}\n" f"内容:\n" f"{remind_msg}"
         if not schedule_info:
             await reminder_room.say(f"{send_msg}")
             logger.info(
@@ -150,8 +142,8 @@ class ReminderBot(Wechaty):
         text = msg.text()
         room = msg.room()
         from_contact = msg.talker()
-        # 仅回复群聊问题
-        if room is None or from_contact.get_id() == SELF_ID:
+        # 仅回复群聊及其他人消息
+        if room is None or from_contact.get_id() == self.user_self().get_id():
             return
         table = {
             ord(f): ord(t)
@@ -166,9 +158,7 @@ class ReminderBot(Wechaty):
             else:
                 await room.ready()
                 await room.say(
-                    f"无此命令: {cmd}\n"
-                    "当前支持命令:\n"
-                    f"{', '.join(self._commands)}"
+                    f"无此命令: {cmd}\n" "当前支持命令:\n" f"{', '.join(self._commands)}"
                 )
         except Exception as e:
             await room.ready()

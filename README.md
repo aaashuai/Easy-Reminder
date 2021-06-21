@@ -9,9 +9,8 @@
 
    1. 参考[这里](https://python-wechaty.readthedocs.io/zh_CN/latest/introduction/use-web-protocol/) 启动web协议服务
    2. 配置环境变量
-      1. 配置机器人ID(可先通过一次对话获取)
-      2. 配置TOKEN (与1中运行的WECHATY_TOKEN相同)
-      3. 配置 WECHATY_PUPPET_SERVICE_ENDPOINT (1启动的链接)
+      1. 配置TOKEN (与1中运行的WECHATY_TOKEN相同)
+      2. 配置 WECHATY_PUPPET_SERVICE_ENDPOINT (1启动的链接)
 
 3. 使用方式
 
