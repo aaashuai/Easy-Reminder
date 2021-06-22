@@ -141,9 +141,8 @@ class ReminderBot(Wechaty):
     async def on_message(self, msg: Message):
         text = msg.text()
         room = msg.room()
-        from_contact = msg.talker()
         # 仅回复群聊及其他人消息
-        if room is None or from_contact.get_id() == self.user_self().get_id():
+        if room is None or msg.is_self():
             return
         table = {
             ord(f): ord(t)
