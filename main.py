@@ -69,6 +69,7 @@ class ReminderBot(Wechaty):
                         remind_msg=job.remind_msg,
                         job_name=job.name,
                         schedule_info=job.schedule_info,
+                        current_run_time=job.next_run_time,
                     )
                     continue
                 # next_job_interval = job.next_run_time - cur_time
@@ -85,6 +86,7 @@ class ReminderBot(Wechaty):
         self,
         room_id: str,
         job_id: int,
+        current_run_time: int,
         remind_msg: str,
         job_name: Optional[str],
         schedule_info: Optional[str],
@@ -108,6 +110,7 @@ class ReminderBot(Wechaty):
             job_name=job_name,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
+            current_run_time=current_run_time,
         )
         await reminder_room.say(
             f"{send_msg}\n"
@@ -124,14 +127,14 @@ class ReminderBot(Wechaty):
         job_name: str,
         remind_msg: str,
         schedule_info: str,
+        current_run_time: int,
     ) -> TableScheduleJob:
         """周期性任务重新创建"""
-        now = datetime.now()
         if schedule_info not in JobScheduleType.all_values():
             time_diff = int(schedule_info) * 24 * 60 * 60
         else:
             time_diff = JobScheduleType.get_type(schedule_info).timestamp2now()
-        next_run_time = int(now.timestamp()) + time_diff
+        next_run_time = current_run_time + time_diff
         return ScheduleJobDao.create_job(
             room_id=room_id,
             name=job_name,
