@@ -20,7 +20,7 @@ class ScheduleJobDao:
         query = cls.model.select()
         if query_filter:
             query = query.where(*query_filter)
-        return query.count(), query.order_by(-cls.model.id)
+        return query.count(), query.order_by(cls.model.next_run_time)
 
     @classmethod
     def create_job(

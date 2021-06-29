@@ -100,7 +100,7 @@ class ReminderBot(Wechaty):
         reminder_room = await self.Room.find(RoomQueryFilter(topic=room_id))
         assert reminder_room, f"未找到群聊: {room_id}"
         ScheduleJobDao.job_done(job_id)
-        send_msg = f"{TimeUtil.now_datetime_str()}\n" f"内容:\n" f"{remind_msg}"
+        send_msg = f"{TimeUtil.timestamp2datetime(current_run_time)}\n" f"内容:\n" f"{remind_msg}"
         if not schedule_info:
             await reminder_room.say(f"{send_msg}")
             logger.info(
