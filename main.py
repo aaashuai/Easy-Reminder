@@ -63,14 +63,17 @@ class ReminderBot(Wechaty):
             for job in all_jobs:
                 # 允许1秒以内的误差
                 if abs(job.next_run_time - cur_time) <= 1:
-                    await self._remind_something(
-                        room_id=job.room_id,
-                        job_id=job.id,
-                        remind_msg=job.remind_msg,
-                        job_name=job.name,
-                        schedule_info=job.schedule_info,
-                        current_run_time=job.next_run_time,
-                    )
+                    try:
+                        await self._remind_something(
+                            room_id=job.room_id,
+                            job_id=job.id,
+                            remind_msg=job.remind_msg,
+                            job_name=job.name,
+                            schedule_info=job.schedule_info,
+                            current_run_time=job.next_run_time,
+                        )
+                    except Exception as e:
+                        logger.warning(f"错误: {e}")
                     continue
                 # next_job_interval = job.next_run_time - cur_time
                 # min_sleep = (
