@@ -7,6 +7,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from wechaty import Wechaty, Room, Message, WechatyOptions
+from wechaty_puppet import RoomQueryFilter
 
 from constants import EN2ZH_MAP
 from dao import ScheduleJobDao
@@ -65,13 +66,17 @@ class ReminderBot(Wechaty):
             for job in all_jobs:
                 # 允许1秒以内的误差
                 if abs(job.next_run_time - cur_time) <= 1:
-                    await self._remind_something(
-                        room_id=job.room_id,
-                        job_id=job.id,
-                        remind_msg=job.remind_msg,
-                        job_name=job.name,
-                        schedule_info=job.schedule_info,
-                    )
+                    try:
+                        await self._remind_something(
+                            room_id=job.room_id,
+                            job_id=job.id,
+                            remind_msg=job.remind_msg,
+                            job_name=job.name,
+                            schedule_info=job.schedule_info,
+                            current_run_time=job.next_run_time,
+                        )
+                    except Exception as e:
+                        logger.warning(f"错误: {e}")
                     continue
                 # next_job_interval = job.next_run_time - cur_time
                 # min_sleep = (
@@ -87,6 +92,7 @@ class ReminderBot(Wechaty):
         self,
         room_id: str,
         job_id: int,
+        current_run_time: int,
         remind_msg: str,
         job_name: Optional[str],
         schedule_info: Optional[str],
@@ -94,9 +100,10 @@ class ReminderBot(Wechaty):
         logger.info(
             f"task execute, room_id:{room_id},job_id:{job_id},remind_msg:{remind_msg}"
         )
-        reminder_room = await self.Room.find(room_id)
+        reminder_room = await self.Room.find(RoomQueryFilter(topic=room_id))
+        assert reminder_room, f"未找到群聊: {room_id}"
         ScheduleJobDao.job_done(job_id)
-        send_msg = f"{TimeUtil.now_datetime_str()}\n" f"内容:\n" f"{remind_msg}"
+        send_msg = f"{TimeUtil.timestamp2datetime(current_run_time)}\n" f"内容:\n" f"{remind_msg}"
         if not schedule_info:
             await reminder_room.say(f"{send_msg}")
             logger.info(
@@ -109,6 +116,7 @@ class ReminderBot(Wechaty):
             job_name=job_name,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
+            current_run_time=current_run_time,
         )
         await reminder_room.say(
             f"{send_msg}\n"
@@ -125,14 +133,14 @@ class ReminderBot(Wechaty):
         job_name: str,
         remind_msg: str,
         schedule_info: str,
+        current_run_time: int,
     ) -> TableScheduleJob:
         """周期性任务重新创建"""
-        now = datetime.now()
         if schedule_info not in JobScheduleType.all_values():
             time_diff = int(schedule_info) * 24 * 60 * 60
         else:
             time_diff = JobScheduleType.get_type(schedule_info).timestamp2now()
-        next_run_time = int(now.timestamp()) + time_diff
+        next_run_time = current_run_time + time_diff
         return ScheduleJobDao.create_job(
             room_id=room_id,
             name=job_name,
@@ -144,9 +152,8 @@ class ReminderBot(Wechaty):
     async def on_message(self, msg: Message):
         text = msg.text()
         room = msg.room()
-        from_contact = msg.talker()
         # 仅回复群聊及其他人消息
-        if room is None or from_contact.get_id() == self.user_self().get_id():
+        if room is None or msg.is_self():
             return
 
         try:
@@ -166,7 +173,7 @@ class ReminderBot(Wechaty):
         """获取当前任务列表
         > all tasks
         """
-        job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.room_id)
+        job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.payload.topic)
         if not job_count:
             return await room.say("当前无生效任务\n请通过 [ remind,日期,提醒内容 ] 进行创建")
         txt = f"当前共有{job_count}条任务: \n"
@@ -190,7 +197,7 @@ class ReminderBot(Wechaty):
         remind_msg = ", ".join([remind_msg, *remind_left])
         next_run_time, schedule_info = self.ner.extract_time(given_time)
         job = ScheduleJobDao.create_job(
-            room_id=room.room_id,
+            room_id=room.payload.topic,
             next_run_time=next_run_time,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
@@ -216,7 +223,7 @@ class ReminderBot(Wechaty):
         assert is_success > 0, "任务失败, 请重试"
         txt = f"ID:{job_id}, 任务已取消\n\n"
 
-        job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.room_id)
+        job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.payload.topic)
         if not job_count:
             txt += "当前已无生效任务\n请通过 [ remind,日期,提醒内容 ] 进行创建"
             return await room.say(txt)
