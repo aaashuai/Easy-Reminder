@@ -184,7 +184,8 @@ class ReminderBot(Wechaty):
         例:
         > remind,明天上午11点,吃东西
         """
-        given_time, remind_msg, *_ = args
+        given_time, remind_msg, *remind_left = args
+        remind_msg = ", ".join([remind_msg, *remind_left])
         next_run_time, schedule_info = NerUtil.extract_time(given_time)
         job = ScheduleJobDao.create_job(
             room_id=room.room_id,
