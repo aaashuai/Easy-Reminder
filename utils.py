@@ -2,93 +2,22 @@ from datetime import datetime, timedelta
 from typing import Optional, Union, Tuple
 
 from logger import logger
-from ner.dtime.dtime import date_extractor
+from ner.dtime.dtime import ZHDatetimeExtractor
 import re
 
-from ner.number import number_ext
+from ner.number import number_ext, ZHNumberExtractor
 from typevar import JobScheduleType
 
-ScheduleRe = re.compile(r"每((?P<daily>天|一天|1天)|(?P<days>(.*)天)|(?P<weekly>周)|(?P<monthly>月|个月)|(?P<yearly>年|1年|一年))(?P<date>.*)")
-
-
-class NerUtil:
-    @classmethod
-    def extract_number(cls, text: str) -> Optional[int]:
-        res = number_ext.parse(text)
-        if not res:
-            return
-        logger.info(res)
-        logger.info(res[0].num)
-        return res[0].num
-
-    @classmethod
-    def extract_time(cls, text: str) -> Optional[Tuple[int, Optional[JobScheduleType]]]:
-        res = cls.extract_schedule(text)
-        if res:
-            next_run_time, schedule_info = res
-            return next_run_time, schedule_info
-        return cls.extract_once(text), None
-
-    @staticmethod
-    def extract_datetime(text: str) -> Optional[datetime]:
-        res = date_extractor.parse(text)
-        if not res:
-            return
-        logger.info(res)
-        logger.info(res[0].values[-1].value)
-        return res[0].values[-1].value
-
-    @classmethod
-    def extract_once(cls, text: str) -> Optional[int]:
-        d_datetime = cls.extract_datetime(text)
-        assert d_datetime, "未获取到有效时间, 请重新输入"
-        now = datetime.now()
-        assert d_datetime > now, "设置时间必须大于现在"
-        return int(d_datetime.timestamp())
-
-    @classmethod
-    def extract_schedule(cls, text: str) -> Optional[Tuple[int, Union[JobScheduleType, int]]]:
-        """返回下次时间和周期类型
-        每周三 -> 下次运行时间戳, 一周的秒数
-        """
-        match_result = ScheduleRe.match(text)
-
-        if not match_result:
-            return
-
-        match_dict = match_result.groupdict()
-        given_date = match_dict.pop("date")
-        # 指定具体日期周期的处理
-        if match_dict["days"]:
-            days = NerUtil.extract_number(match_dict["days"])
-            next_run_time = int((datetime.now() + timedelta(days=days)).timestamp())
-            return next_run_time, days
-
-        d_datetime = cls.extract_datetime(given_date)
-
-        if not d_datetime:
-            return
-
-        period = None
-        for k, v in match_dict.items():
-            if v:
-                period = k
-                break
-        assert period, "为获取到有效周期, 请重新输入"
-        schedule_type = JobScheduleType.get_type(period)
-
-        now = datetime.now()
-        if d_datetime <= now:
-            next_run_time = TimeUtil.datetime2timestamp(d_datetime) + schedule_type.timestamp2now()
-        else:
-            next_run_time = int(d_datetime.timestamp())
-
-        return next_run_time, schedule_type.value
+ScheduleRe = re.compile(
+    r"每((?P<daily>天|一天|1天)|(?P<days>(.*)天)|(?P<weekly>周[1-6一二三四五六日天]?)|(?P<monthly>月|个月)|(?P<yearly>年|1年|一年))(?P<date>.*)"
+)
 
 
 class TimeUtil:
     @staticmethod
-    def datetime2timestamp(date_arg: Union[datetime, str], fmt: str = "%Y-%m-%d %H:%M:%S") -> int:
+    def datetime2timestamp(
+        date_arg: Union[datetime, str], fmt: str = "%Y-%m-%d %H:%M:%S"
+    ) -> int:
         if isinstance(date_arg, str):
             date_arg = datetime.strptime(date_arg, fmt)
         return int(date_arg.timestamp())
@@ -107,7 +36,12 @@ class TimeUtil:
 
         if seconds is None:
             return ""
-        d, h, m, s = seconds // 86400, (seconds % 86400) // 3600, (seconds % 3600) // 60, seconds % 60
+        d, h, m, s = (
+            seconds // 86400,
+            (seconds % 86400) // 3600,
+            (seconds % 3600) // 60,
+            seconds % 60,
+        )
 
         txt = ""
         if d:
@@ -124,27 +58,109 @@ class TimeUtil:
     def now_datetime_str() -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    @staticmethod
+    def now_datetime() -> datetime:
+        return datetime.now()
 
-if __name__ == '__main__':
-    assert TimeUtil.seconds2date_str(15) == '15秒', TimeUtil.seconds2date_str(15)
-    assert TimeUtil.seconds2date_str(61) == '1分1秒', TimeUtil.seconds2date_str(61)
-    assert TimeUtil.seconds2date_str(3661) == '1时1分1秒', TimeUtil.seconds2date_str(3661)
-    assert TimeUtil.seconds2date_str(90061) == '1天1时1分1秒', TimeUtil.seconds2date_str(90061)
 
-    # while True:
-    #     print('-'*30)
-    #     try:
-    #         txt = input("date: ")
-    #         job_type, next_run_time, period_type = NerUtil.extract_time(txt)
-    #         print(job_type.name)
-    #         print(TimeUtil.timestamp2datetime(next_run_time))
-    #         print(period_type)
-    #     except Exception as e:
-    #         print(str(e))
-    while True:
-        print('-'*30)
-        try:
-            txt = input("number: ")
-            print(NerUtil.extract_number(txt))
-        except Exception as e:
-            print(str(e))
+class NerUtil:
+    def __init__(self):
+        self.date_extractor = ZHDatetimeExtractor(now=TimeUtil.now_datetime())
+        self.num_extractor = ZHNumberExtractor()
+
+    def extract_number(self, text: str) -> Optional[int]:
+        res = self.num_extractor.parse(text)
+        if not res:
+            return
+        logger.info(res)
+        logger.info(res[0].num)
+        return res[0].num
+
+    def extract_time(
+        self, text: str
+    ) -> Optional[Tuple[int, Optional[JobScheduleType]]]:
+        res = self.extract_schedule(text)
+        if res:
+            next_run_time, schedule_info = res
+            return next_run_time, schedule_info
+        return self.extract_once(text), None
+
+    def extract_datetime(self, text: str) -> Optional[datetime]:
+        res = self.date_extractor.parse(text)
+        if not res:
+            return
+        logger.info(res)
+        logger.info(res[0].values[-1].value)
+        return res[0].values[-1].value
+
+    def extract_once(self, text: str) -> Optional[int]:
+        d_datetime = self.extract_datetime(text)
+        assert d_datetime, "未获取到有效时间, 请重新输入"
+        assert d_datetime > TimeUtil.now_datetime(), "设置时间必须大于现在"
+        return int(d_datetime.timestamp())
+
+    def _schedule_days_process(self, days: str):
+        days = self.extract_number(days)
+        next_run_time = int(
+            (TimeUtil.now_datetime() + timedelta(days=days)).timestamp()
+        )
+        return next_run_time, days
+
+    @staticmethod
+    def _schedule_get_type(match_dict: dict) -> JobScheduleType:
+        period = None
+        for k, v in match_dict.items():
+            if v:
+                period = k
+                break
+        assert period, "为获取到有效周期, 请重新输入"
+        return JobScheduleType.get_type(period)
+
+    def _schedule_refresh_d_datetime(self, match_weekly: str) -> timedelta:
+        now = TimeUtil.now_datetime()
+        start_date = self.extract_datetime(match_weekly)
+        # 处理今天周三, 询问周二, 日期获取的是昨天的情况
+        days_7 = timedelta(days=7)
+        if start_date.date() - now.date() == days_7:
+            return timedelta(days=0)
+        elif start_date.date() < now.date():
+            start_date += days_7
+        return timedelta(days=(start_date - now).days + 1)
+
+    def extract_schedule(
+        self, text: str
+    ) -> Optional[Tuple[int, Union[JobScheduleType, int]]]:
+        """返回下次时间和周期类型
+        每周三下午六点 -> 下次运行时间戳, 一周的秒数
+        """
+        match_result = ScheduleRe.match(text)
+
+        if not match_result:
+            return
+
+        match_dict = match_result.groupdict()
+        given_date = match_dict.pop("date")
+        # 指定具体日期周期的处理
+        if match_dict["days"]:
+            return self._schedule_days_process(match_dict["days"])
+
+        d_datetime = self.extract_datetime(given_date)
+
+        if not d_datetime:
+            return
+
+        schedule_type = self._schedule_get_type(match_dict)
+
+        # 每周几的处理
+        match_weekly = match_dict["weekly"]
+        if match_weekly and len(match_weekly) != 1:
+            d_datetime += self._schedule_refresh_d_datetime(match_weekly)
+
+        if d_datetime <= TimeUtil.now_datetime():
+            next_run_time = (
+                TimeUtil.datetime2timestamp(d_datetime) + schedule_type.timestamp2now()
+            )
+        else:
+            next_run_time = int(d_datetime.timestamp())
+
+        return next_run_time, schedule_type.value

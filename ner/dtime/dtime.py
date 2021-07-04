@@ -890,7 +890,10 @@ def get_datetime_value(data: Union[Dict, datetime]) -> Tuple[datetime, Optional[
 
 
 class ZHDatetimeExtractor(BaseExtractor):
-    def __init__(self):
+    def __init__(self, now: datetime = None):
+        if now is None:
+            now = datetime.now()
+
         self.patterns = {
             # 类似"(年.)月.日"的识别
             re.compile(YEAR_OPTIONAL_DATE): 0,
@@ -992,6 +995,7 @@ class ZHDatetimeExtractor(BaseExtractor):
             # 表达"xx月xx"
             re.compile(r"([2-9]|1[0-2]?)月(3[01]|[1-2]\d|[1-9])[日]?"): 46,
         }
+        self.now = now
 
     def parse(self, text: Text, *args: Any) -> List[Datetime]:
         # s_arabic_without_dot: 中文数字转换为阿拉伯数字 (不替换"点")
@@ -1001,7 +1005,7 @@ class ZHDatetimeExtractor(BaseExtractor):
             space_index,
         ) = number_ext.parse_datetime_num(text)
         # 当前时间
-        now = datetime.now()
+        now = self.now
         # 识别结果
         r = []
         durations = []

@@ -55,6 +55,8 @@ class ReminderBot(Wechaty):
             if cmd:
                 self._commands[cmd] = method
 
+        self.ner = NerUtil()
+
     async def _run_schedule_task(self):
         while True:
             _, all_jobs = ScheduleJobDao.get_all_jobs()
@@ -186,7 +188,7 @@ class ReminderBot(Wechaty):
         """
         given_time, remind_msg, *remind_left = args
         remind_msg = ", ".join([remind_msg, *remind_left])
-        next_run_time, schedule_info = NerUtil.extract_time(given_time)
+        next_run_time, schedule_info = self.ner.extract_time(given_time)
         job = ScheduleJobDao.create_job(
             room_id=room.room_id,
             next_run_time=next_run_time,
