@@ -8,6 +8,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from wechaty import Wechaty, Room, Message, WechatyOptions
 
+from constants import EN2ZH_MAP
 from dao import ScheduleJobDao
 from logger import logger
 from models import TableScheduleJob
@@ -145,27 +146,24 @@ class ReminderBot(Wechaty):
         # 仅回复群聊及其他人消息
         if room is None or from_contact.get_id() == self.user_self().get_id():
             return
-        table = {
-            ord(f): ord(t)
-            for f, t in zip("，。！？【】（）％＃＠＆１２３４５６７８９０", ",.!?[]()%#@&1234567890")
-        }
 
         try:
-            cmd, *args = text.translate(table).split(",")
+            cmd, *args = text.translate(EN2ZH_MAP).split(",")
             if cmd in self._commands:
                 await room.ready()
                 await self._commands[cmd](self, *args, room=room)
             else:
                 await room.ready()
-                await room.say(
-                    f"无此命令: {cmd}\n" "当前支持命令:\n" f"{', '.join(self._commands)}"
-                )
+                await room.say(f"无此命令: {cmd}\n" "当前支持命令:\n{', '.join(self._commands)}")
         except Exception as e:
             await room.ready()
             await room.say(f"处理消息失败:\n{text}\n\n{e}")
 
     @command("all tasks")
     async def all_tasks(self, *args, room: Room, **kwargs):
+        """获取当前任务列表
+        > all tasks
+        """
         job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.room_id)
         if not job_count:
             return await room.say("当前无生效任务\n请通过 [ remind,日期,提醒内容 ] 进行创建")
@@ -181,6 +179,11 @@ class ReminderBot(Wechaty):
 
     @command
     async def remind(self, *args, room: Room, **kwargs):
+        """创建一条提醒记录
+        > remind,提醒时间,提醒内容
+        例:
+        > remind,明天上午11点,吃东西
+        """
         given_time, remind_msg, *_ = args
         next_run_time, schedule_info = NerUtil.extract_time(given_time)
         job = ScheduleJobDao.create_job(
@@ -199,6 +202,11 @@ class ReminderBot(Wechaty):
 
     @command
     async def cancel(self, *args, room: Room, **kwargs):
+        """取消一条任务
+        > cancel,id
+        例:
+        > cancel,12
+        """
         job_id, *_ = args
         assert int(job_id), "任务ID不合法"
         is_success = ScheduleJobDao.cancel_job(job_id)
@@ -222,7 +230,16 @@ class ReminderBot(Wechaty):
 
     @command("help")
     async def show_help(self, *args, room: Room, **kwargs):
-        await room.say(f"This is help, args: {args}, kwargs: {kwargs}")
+        """显示某命令使用方法
+        > help,remind
+        """
+        cmd, *_ = args
+        assert (
+            cmd in self._commands
+        ), f"无此命令: {cmd}\n当前支持命令:\n{', '.join(self._commands)}"
+        docs = getattr(self, cmd).__doc__
+
+        await room.say("\n".join([l.strip() for l in docs.split("\n")]))
 
 
 async def main():
