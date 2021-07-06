@@ -163,7 +163,7 @@ class ReminderBot(Wechaty):
                 await self._commands[cmd](self, *args, room=room)
             else:
                 await room.ready()
-                await room.say(f"无此命令: {cmd}\n" "当前支持命令:\n{', '.join(self._commands)}")
+                await room.say(f"无此命令: {cmd}\n当前支持命令:\n{', '.join(self._commands)}")
         except Exception as e:
             await room.ready()
             await room.say(f"处理消息失败:\n{text}\n\n{e}")
