@@ -247,9 +247,19 @@ class ReminderBot(Wechaty):
         assert (
             cmd in self._commands
         ), f"无此命令: {cmd}\n当前支持命令:\n{', '.join(self._commands)}"
-        docs = getattr(self, cmd).__doc__
+        docs = self._commands[cmd].__doc__
 
         await room.say("\n".join([l.strip() for l in docs.split("\n")]))
+
+    @command("room info")
+    async def show_room_info(self, *args, room: Room, **kwargs):
+        """获取当前群聊信息
+        > room info
+        """
+        await room.say(
+            f"Topic: {room.payload.topic}\n"
+            f"Id: {room.room_id}"
+        )
 
 
 async def main():
