@@ -103,7 +103,11 @@ class ReminderBot(Wechaty):
         reminder_room = await self.Room.find(RoomQueryFilter(topic=room_id))
         assert reminder_room, f"未找到群聊: {room_id}"
         ScheduleJobDao.job_done(job_id)
-        send_msg = f"{TimeUtil.timestamp2datetime(current_run_time)}\n" f"内容:\n" f"{remind_msg}"
+        send_msg = (
+            f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
+            f"内容:\n"
+            f"{remind_msg}"
+        )
         if not schedule_info:
             await reminder_room.say(f"{send_msg}")
             logger.info(
@@ -256,9 +260,36 @@ class ReminderBot(Wechaty):
         """获取当前群聊信息
         > room info
         """
+        await room.say(f"Topic: {room.payload.topic}\n" f"Id: {room.room_id}")
+
+    @command
+    async def update(self, *args, room: Room, **kwargs):
+        """更新某个任务
+        > update,id,时间,内容 (m:id, o:时间, o:内容)
+        > update,12,明天上午9点,吃东西
+        > update,12,,吃东西
+        > update,12,后天上午9点,
+        """
+        job_id, n_time, *n_msg = args
+        assert job_id and int(job_id), "请填写正确的ID"
+        assert n_time or n_msg, "时间和内容必须修改一项"
+        _update = {}
+        if n_time:
+            next_run_time, schedule_info = self.ner.extract_time(n_time)
+            _update.update(next_run_time=next_run_time, schedule_info=schedule_info)
+
+        if n_msg:
+            remind_msg = ", ".join(n_msg)
+            _update.update(remind_msg=remind_msg)
+
+        nrow = ScheduleJobDao.update_job(job_id=int(job_id), **_update)
+        assert nrow, "没有这个ID, 任务失败, 请重试"
+        job = ScheduleJobDao.get_job(job_id=int(job_id))
         await room.say(
-            f"Topic: {room.payload.topic}\n"
-            f"Id: {room.room_id}"
+            f"任务已更新\n"
+            f"ID:{job.id}\n"
+            f"下一次执行时间:\n{TimeUtil.timestamp2datetime(job.next_run_time)}\n"
+            f"内容:{job.remind_msg}\n"
         )
 
 

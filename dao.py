@@ -1,8 +1,8 @@
 import uuid
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Optional
 
 from models import TableScheduleJob
-from typevar import JobState, JobScheduleType
+from typevar import JobState
 
 
 class ScheduleJobDao:
@@ -42,12 +42,23 @@ class ScheduleJobDao:
         )
 
     @classmethod
-    def update_job(cls, job_id: int, next_run_time: int) -> int:
-        return (
-            cls.model.update(next_run_time=next_run_time)
-            .where(cls.model.id == job_id)
-            .execute()
-        )
+    def update_job(
+        cls,
+        job_id: int,
+        next_run_time: int = None,
+        remind_msg: str = None,
+        schedule_info: Union[str, int] = None,
+    ) -> int:
+        _update = {}
+        if next_run_time:
+            _update["next_run_time"] = next_run_time
+        if schedule_info:
+            _update["schedule_info"] = schedule_info
+        if remind_msg:
+            _update["remind_msg"] = remind_msg
+
+        assert _update, "你必须更新点什么"
+        return cls.model.update(**_update).where(cls.model.id == job_id).execute()
 
     @classmethod
     def job_done(cls, job_id) -> int:
@@ -65,9 +76,17 @@ class ScheduleJobDao:
             .execute()
         )
 
+    @classmethod
+    def get_job(cls, job_id: int) -> Optional[TableScheduleJob]:
+        return cls.model.get_or_none(
+            cls.model.id == job_id, cls.model.state == JobState.ready
+        )
+
 
 if __name__ == "__main__":
     # r = ScheduleJobDao.create_job(room_id=1, next_run_time=1, job_type=0, remind_msg='test')
-    c, j = ScheduleJobDao.get_all_jobs(state=JobState.done)
-    print(c)
-    print(list(j))
+    # c, j = ScheduleJobDao.get_all_jobs(state=JobState.done)
+    # print(c)
+    # print(list(j))
+    job = ScheduleJobDao.get_job(job_id=26)
+    print(job)
