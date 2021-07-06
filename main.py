@@ -102,7 +102,7 @@ class ReminderBot(Wechaty):
         )
         reminder_room = await self.Room.find(RoomQueryFilter(topic=room_id))
         assert reminder_room, f"未找到群聊: {room_id}"
-        ScheduleJobDao.job_done(job_id)
+        ScheduleJobDao.job_done(job_id, room_id=room_id)
         send_msg = (
             f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
             f"内容:\n"
@@ -216,16 +216,23 @@ class ReminderBot(Wechaty):
 
     @command
     async def cancel(self, *args, room: Room, **kwargs):
-        """取消一条任务
-        > cancel,id
+        """取消一条任务/多条任务
+        > cancel,id[,id2...]
         例:
         > cancel,12
+        > cancel,12,13,14
         """
-        job_id, *_ = args
+        job_id, *other_job_ids = args
         assert int(job_id), "任务ID不合法"
-        is_success = ScheduleJobDao.cancel_job(job_id)
-        assert is_success > 0, "任务失败, 请重试"
-        txt = f"ID:{job_id}, 任务已取消\n\n"
+        if other_job_ids:
+            assert [int(j_id) for j_id in other_job_ids], "任务ID不合法"
+
+        nrows = ScheduleJobDao.cancel_jobs(
+            job_id, *other_job_ids, room_id=room.payload.topic
+        )
+        assert nrows == len([job_id, *other_job_ids]), "任务失败, 请重试"
+
+        txt = f"ID:{', '.join([job_id, *other_job_ids])}, 任务已取消\n\n"
 
         job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.payload.topic)
         if not job_count:
@@ -284,7 +291,7 @@ class ReminderBot(Wechaty):
 
         nrow = ScheduleJobDao.update_job(job_id=int(job_id), **_update)
         assert nrow, "没有这个ID, 任务失败, 请重试"
-        job = ScheduleJobDao.get_job(job_id=int(job_id))
+        job = ScheduleJobDao.get_job(job_id=int(job_id), room_id=room.payload.topic)
         await room.say(
             f"任务已更新\n"
             f"ID:{job.id}\n"

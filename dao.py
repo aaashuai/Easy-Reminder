@@ -61,32 +61,33 @@ class ScheduleJobDao:
         return cls.model.update(**_update).where(cls.model.id == job_id).execute()
 
     @classmethod
-    def job_done(cls, job_id) -> int:
+    def job_done(cls, job_id: int, room_id: str) -> int:
         return (
             cls.model.update(state=JobState.done)
-            .where(cls.model.id == job_id)
+            .where(cls.model.id == job_id, cls.model.room_id == room_id)
             .execute()
         )
 
     @classmethod
-    def cancel_job(cls, job_id: int) -> int:
+    def cancel_jobs(cls, *job_ids: int, room_id: str) -> int:
         return (
             cls.model.update(state=JobState.cancel)
-            .where(cls.model.id == job_id)
+            .where(cls.model.id.in_(job_ids), cls.model.room_id == room_id)
             .execute()
         )
 
     @classmethod
-    def get_job(cls, job_id: int) -> Optional[TableScheduleJob]:
+    def get_job(
+        cls, job_id: int, room_id: str, job_state: JobState = JobState.ready
+    ) -> Optional[TableScheduleJob]:
         return cls.model.get_or_none(
-            cls.model.id == job_id, cls.model.state == JobState.ready
+            cls.model.id == job_id,
+            cls.model.room_id == room_id,
+            cls.model.state == job_state,
         )
 
 
 if __name__ == "__main__":
-    # r = ScheduleJobDao.create_job(room_id=1, next_run_time=1, job_type=0, remind_msg='test')
-    # c, j = ScheduleJobDao.get_all_jobs(state=JobState.done)
-    # print(c)
-    # print(list(j))
-    job = ScheduleJobDao.get_job(job_id=26)
-    print(job)
+    c, j = ScheduleJobDao.get_all_jobs(state=JobState.done)
+    print(c)
+    print(list(j))
