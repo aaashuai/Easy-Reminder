@@ -65,7 +65,7 @@ class TimeUtil:
 
 class NerUtil:
     def __init__(self):
-        self.date_extractor = ZHDatetimeExtractor(now=TimeUtil.now_datetime())
+        self.date_extractor = ZHDatetimeExtractor(now_func=TimeUtil.now_datetime)
         self.num_extractor = ZHNumberExtractor()
 
     def extract_number(self, text: str) -> Optional[int]:

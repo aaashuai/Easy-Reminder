@@ -6,26 +6,27 @@ from typing import Union
 
 
 def ner_time_interactively():
-    # while True:
-    #     print('-'*30)
-    #     try:
-    #         txt = input("date: ")
-    #         job_type, next_run_time, period_type = NerUtil.extract_time(txt)
-    #         print(job_type.name)
-    #         print(TimeUtil.timestamp2datetime(next_run_time))
-    #         print(period_type)
-    #     except Exception as e:
-    #         print(str(e))
     ner = NerUtil()
 
     while True:
-        print("-" * 30)
+        print('-'*30)
         try:
-            txt = input("number: ")
-            print(ner.extract_number(txt))
+            txt = input("date: ")
+            job_type, next_run_time, period_type = ner.extract_time(txt)
+            print(job_type.name)
+            print(TimeUtil.timestamp2datetime(next_run_time))
+            print(period_type)
         except Exception as e:
             print(str(e))
 
+    # while True:
+    #     print("-" * 30)
+    #     try:
+    #         txt = input("number: ")
+    #         print(ner.extract_number(txt))
+    #     except Exception as e:
+    #         print(str(e))
+    #
 
 def test_extract_schedule(mocker):
     d_wed = datetime.strptime("2021-07-07 15:00:00", "%Y-%m-%d %H:%M:%S")
@@ -62,3 +63,4 @@ def test_extract_schedule(mocker):
 
 if __name__ == "__main__":
     pytest.main([__file__])
+    # ner_time_interactively()

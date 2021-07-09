@@ -1,6 +1,6 @@
 import regex as re
 from datetime import datetime, time
-from typing import Optional, Dict, Union, Tuple, List
+from typing import Optional, Dict, Union, Tuple, List, Callable
 from typing import Any, Text
 
 from dateutil.relativedelta import relativedelta
@@ -890,9 +890,9 @@ def get_datetime_value(data: Union[Dict, datetime]) -> Tuple[datetime, Optional[
 
 
 class ZHDatetimeExtractor(BaseExtractor):
-    def __init__(self, now: datetime = None):
-        if now is None:
-            now = datetime.now()
+    def __init__(self, now_func: Callable = None):
+        if now_func is None:
+            now_func = datetime.now
 
         self.patterns = {
             # 类似"(年.)月.日"的识别
@@ -995,7 +995,7 @@ class ZHDatetimeExtractor(BaseExtractor):
             # 表达"xx月xx"
             re.compile(r"([2-9]|1[0-2]?)月(3[01]|[1-2]\d|[1-9])[日]?"): 46,
         }
-        self.now = now
+        self.now_func = now_func
 
     def parse(self, text: Text, *args: Any) -> List[Datetime]:
         # s_arabic_without_dot: 中文数字转换为阿拉伯数字 (不替换"点")
@@ -1005,7 +1005,7 @@ class ZHDatetimeExtractor(BaseExtractor):
             space_index,
         ) = number_ext.parse_datetime_num(text)
         # 当前时间
-        now = self.now
+        now = self.now_func()
         # 识别结果
         r = []
         durations = []
