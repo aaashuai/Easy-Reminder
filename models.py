@@ -7,7 +7,7 @@ db = SqliteDatabase('wxbot.db')
 
 class TableScheduleJob(Model):
     id = IntegerField(index=True, primary_key=True)
-    room_id = IntegerField(index=True, help_text="群聊ID")
+    room = IntegerField(index=True, help_text="群聊房间标识")
     name = CharField(index=True, help_text="任务名称")
     next_run_time = IntegerField(help_text="下一次执行时间")
     schedule_info = CharField(null=True, help_text="周期类型或天数")

@@ -65,7 +65,7 @@ class ReminderBot(Wechaty):
                 if abs(job.next_run_time - cur_time) <= 1:
                     try:
                         await self._remind_something(
-                            room_id=job.room_id,
+                            room=job.room,
                             job_id=job.id,
                             remind_msg=job.remind_msg,
                             job_name=job.name,
@@ -87,7 +87,7 @@ class ReminderBot(Wechaty):
 
     async def _remind_something(
         self,
-        room_id: str,
+        room: str,
         job_id: int,
         current_run_time: int,
         remind_msg: str,
@@ -95,11 +95,11 @@ class ReminderBot(Wechaty):
         schedule_info: Optional[str],
     ):
         logger.info(
-            f"task execute, room_id:{room_id},job_id:{job_id},remind_msg:{remind_msg}"
+            f"task execute, room:{room},job_id:{job_id},remind_msg:{remind_msg}"
         )
-        reminder_room = await self.Room.find(RoomQueryFilter(topic=room_id))
-        assert reminder_room, f"未找到群聊: {room_id}"
-        ScheduleJobDao.job_done(job_id, room_id=room_id)
+        reminder_room = await self.Room.find(RoomQueryFilter(topic=room))
+        assert reminder_room, f"未找到群聊: {room}"
+        ScheduleJobDao.job_done(job_id, room=room)
         send_msg = (
             f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
             f"内容:\n"
@@ -108,12 +108,12 @@ class ReminderBot(Wechaty):
         if not schedule_info:
             await reminder_room.say(f"{send_msg}")
             logger.info(
-                f"task done, room_id:{room_id},job_id:{job_id},remind_msg:{send_msg}"
+                f"task done, room:{room},job_id:{job_id},remind_msg:{send_msg}"
             )
             return
 
         job = self._renew_job(
-            room_id=room_id,
+            room=room,
             job_name=job_name,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
@@ -125,12 +125,12 @@ class ReminderBot(Wechaty):
             f"{TimeUtil.timestamp2datetime(job.next_run_time)}"
         )
         logger.info(
-            f"task done, room_id:{room_id},job_id:{job_id},remind_msg:{send_msg}"
+            f"task done, room:{room},job_id:{job_id},remind_msg:{send_msg}"
         )
 
     @staticmethod
     def _renew_job(
-        room_id: str,
+        room: str,
         job_name: str,
         remind_msg: str,
         schedule_info: str,
@@ -143,7 +143,7 @@ class ReminderBot(Wechaty):
             time_diff = JobScheduleType.get_type(schedule_info).timestamp2now()
         next_run_time = current_run_time + time_diff
         return ScheduleJobDao.create_job(
-            room_id=room_id,
+            room=room,
             name=job_name,
             next_run_time=next_run_time,
             remind_msg=remind_msg,
@@ -218,7 +218,7 @@ class ReminderBot(Wechaty):
         remind_msg = ", ".join([remind_msg, *remind_left])
         next_run_time, schedule_info = self.ner.extract_time(given_time)
         job = ScheduleJobDao.create_job(
-            room_id=room.payload.topic,
+            room=room.payload.topic,
             next_run_time=next_run_time,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
@@ -245,7 +245,7 @@ class ReminderBot(Wechaty):
             assert [int(j_id) for j_id in other_job_ids], "任务ID不合法"
 
         nrows = ScheduleJobDao.cancel_jobs(
-            job_id, *other_job_ids, room_id=room.payload.topic
+            job_id, *other_job_ids, room=room.payload.topic
         )
         assert nrows == len([job_id, *other_job_ids]), "任务失败, 请重试"
 
@@ -284,7 +284,7 @@ class ReminderBot(Wechaty):
         """获取当前群聊信息
         > room info
         """
-        await room.say(f"Topic: {room.payload.topic}\n" f"Id: {room.room_id}")
+        await room.say(f"Topic: {room.payload.topic}\n" f"Id: {room.room}")
 
     @command
     async def update(self, *args, room: Room, **kwargs):
@@ -308,7 +308,7 @@ class ReminderBot(Wechaty):
 
         nrow = ScheduleJobDao.update_job(job_id=int(job_id), **_update)
         assert nrow, "没有这个ID, 任务失败, 请重试"
-        job = ScheduleJobDao.get_job(job_id=int(job_id), room_id=room.payload.topic)
+        job = ScheduleJobDao.get_job(job_id=int(job_id), room=room.payload.topic)
         await room.say(
             f"任务已更新\n"
             f"ID:{job.id}\n"
