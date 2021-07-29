@@ -1,22 +1,18 @@
 import asyncio
 import functools
 import inspect
+import os
 import time
-from datetime import datetime
 from typing import Optional
 
-from dotenv import load_dotenv
-from wechaty import Wechaty, Room, Message, WechatyOptions
-from wechaty_puppet import RoomQueryFilter
+from wechaty import Wechaty, Room, Message, WechatyOptions, Contact
+from wechaty_puppet import RoomQueryFilter, ScanStatus
 
 from constants import EN2ZH_MAP
-from dao import ScheduleJobDao
+from dao import ScheduleJobDao, ScheduleRecordDao
 from logger import logger
-from models import TableScheduleJob
 from typevar import JobScheduleType
-from utils import TimeUtil, NerUtil
-
-load_dotenv()
+from utils import TimeUtil, NerUtil, QRCode, Email
 
 
 def command(arg):
@@ -46,7 +42,6 @@ def command(arg):
 class ReminderBot(Wechaty):
     def __init__(self, options: Optional[WechatyOptions] = None):
         super().__init__(options)
-        asyncio.create_task(self._run_schedule_task())
         self._commands = {}
 
         for _, method in inspect.getmembers(
@@ -58,66 +53,116 @@ class ReminderBot(Wechaty):
 
         self.ner = NerUtil()
 
+    async def on_login(self, contact: Contact):
+        await asyncio.sleep(3)
+        logger.info("login success")
+        asyncio.create_task(self._run_schedule_task())
+
     async def _run_schedule_task(self):
         while True:
             _, all_jobs = ScheduleJobDao.get_all_jobs()
-            # min_sleep = -1
             cur_time = int(time.time())
             for job in all_jobs:
                 # 允许1秒以内的误差
                 if abs(job.next_run_time - cur_time) <= 1:
                     try:
                         await self._remind_something(
-                            room_id=job.room_id,
-                            job_id=job.id,
+                            room=job.room,
+                            job_id=job.job_id,
                             remind_msg=job.remind_msg,
-                            job_name=job.name,
                             schedule_info=job.schedule_info,
                             current_run_time=job.next_run_time,
                         )
                     except Exception as e:
                         logger.warning(f"错误: {e}")
                     continue
-                # next_job_interval = job.next_run_time - cur_time
-                # min_sleep = (
-                #     min(min_sleep, next_job_interval)
-                #     if min_sleep > 0 and next_job_interval > 0
-                #     else next_job_interval
-                # )
-            # sleep_time = min_sleep if min_sleep > 0 else 1
-            # await asyncio.sleep(sleep_time)
+                # 已经过了执行时间的任务提醒未完成, 并更新
+                elif job.next_run_time < cur_time:
+                    try:
+                        await self._remind_failed_msg(
+                            room=job.room,
+                            job_id=job.job_id,
+                            remind_msg=job.remind_msg,
+                            schedule_info=job.schedule_info,
+                            current_run_time=job.next_run_time,
+                        )
+                    except Exception as e:
+                        logger.warning(f"错误: {e}")
+                    continue
+
             await asyncio.sleep(1)
 
-    async def _remind_something(
+    async def _remind_failed_msg(
         self,
-        room_id: str,
+        room: str,
         job_id: int,
         current_run_time: int,
         remind_msg: str,
-        job_name: Optional[str],
+        schedule_info: Optional[str],
+    ):
+        logger.info(f"task failed, room:{room},job_id:{job_id},remind_msg:{remind_msg}")
+        print(await self.Room.find_all())
+        reminder_room = await self.Room.find(RoomQueryFilter(topic=room))
+        assert reminder_room, f"未找到群聊: {room}"
+        send_msg = (
+            "任务超时, 应执行时间为:\n"
+            f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
+            f"内容:\n"
+            f"{remind_msg}"
+        )
+        ScheduleRecordDao.create_record(job_id, remind_msg)
+        if not schedule_info:
+            ScheduleJobDao.job_done(job_id, room=room)
+            await reminder_room.say(f"{send_msg}")
+            logger.info(f"task done, room:{room},job_id:{job_id},remind_msg:{send_msg}")
+            return
+        while True:
+            next_run_time = self._renew_job(
+                room=room,
+                job_id=job_id,
+                remind_msg=remind_msg,
+                schedule_info=schedule_info,
+                current_run_time=current_run_time,
+            )
+            if next_run_time > int(time.time()):
+                break
+            current_run_time = next_run_time
+
+        await reminder_room.say(
+            f"{send_msg}\n"
+            f"下一次执行时间: \n"
+            f"{TimeUtil.timestamp2datetime(next_run_time)}"
+        )
+        logger.info(f"task done, room:{room},job_id:{job_id},remind_msg:{send_msg}")
+
+    async def _remind_something(
+        self,
+        room: str,
+        job_id: int,
+        current_run_time: int,
+        remind_msg: str,
         schedule_info: Optional[str],
     ):
         logger.info(
-            f"task execute, room_id:{room_id},job_id:{job_id},remind_msg:{remind_msg}"
+            f"task execute, room:{room},job_id:{job_id},remind_msg:{remind_msg}"
         )
-        reminder_room = await self.Room.find(RoomQueryFilter(topic=room_id))
-        assert reminder_room, f"未找到群聊: {room_id}"
-        ScheduleJobDao.job_done(job_id, room_id=room_id)
+        reminder_room = await self.Room.find(RoomQueryFilter(topic=room))
+        assert reminder_room, f"未找到群聊: {room}"
         send_msg = (
             f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
             f"内容:\n"
             f"{remind_msg}"
         )
+        ScheduleRecordDao.create_record(job_id, remind_msg)
         if not schedule_info:
+            ScheduleJobDao.job_done(job_id, room=room)
             await reminder_room.say(f"{send_msg}")
-            logger.info(
-                f"task done, room_id:{room_id},job_id:{job_id},remind_msg:{send_msg}"
-            )
+            logger.info(f"task done, room:{room},job_id:{job_id},remind_msg:{send_msg}")
             return
 
-        job = self._renew_job(
-            room_id=room_id,
-            job_name=job_name,
+        next_run_time = self._renew_job(
+            room=room,
+            job_id=job_id,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
             current_run_time=current_run_time,
@@ -125,33 +170,31 @@ class ReminderBot(Wechaty):
         await reminder_room.say(
             f"{send_msg}\n"
             f"下一次执行时间: \n"
-            f"{TimeUtil.timestamp2datetime(job.next_run_time)}"
+            f"{TimeUtil.timestamp2datetime(next_run_time)}"
         )
-        logger.info(
-            f"task done, room_id:{room_id},job_id:{job_id},remind_msg:{send_msg}"
-        )
+        logger.info(f"task done, room:{room},job_id:{job_id},remind_msg:{send_msg}")
 
     @staticmethod
     def _renew_job(
-        room_id: str,
-        job_name: str,
+        room: str,
+        job_id: int,
         remind_msg: str,
         schedule_info: str,
         current_run_time: int,
-    ) -> TableScheduleJob:
+    ) -> int:
         """周期性任务重新创建"""
         if schedule_info not in JobScheduleType.all_values():
             time_diff = int(schedule_info) * 24 * 60 * 60
         else:
             time_diff = JobScheduleType.get_type(schedule_info).timestamp2now()
         next_run_time = current_run_time + time_diff
-        return ScheduleJobDao.create_job(
-            room_id=room_id,
-            name=job_name,
+        ScheduleJobDao.update_job(
+            job_id=job_id,
+            room=room,
             next_run_time=next_run_time,
             remind_msg=remind_msg,
-            schedule_info=schedule_info,
         )
+        return next_run_time
 
     async def on_message(self, msg: Message):
         text = msg.text()
@@ -172,6 +215,29 @@ class ReminderBot(Wechaty):
             await room.ready()
             await room.say(f"处理消息失败:\n{text}\n\n{e}")
 
+    async def on_scan(
+        self, qr_code: str, status: ScanStatus, data: Optional[str] = None
+    ):
+        try:
+            Email.send_email(Email.construct_html(QRCode.qr_code_img(qr_code)))
+            logger.info("send qrcode to email success")
+        except Exception as e:
+            logger.error("send qrcode to email failed: ", e)
+
+    async def on_logout(self, contact: Contact):
+        # todo use docker to run wechaty
+        def restart_pi_wechaty():
+            os.system(
+                "rm /home/ubuntu/projects/wechaty/python-wechaty-l.memory-card.json"
+            )
+            os.system("supervisorctl restart wechaty")
+
+        try:
+            restart_pi_wechaty()
+            logger.info("restart wechaty success")
+        except Exception as e:
+            logger.error("restart wechaty failed, ", e)
+
     @command("all tasks")
     async def all_tasks(self, *args, room: Room, **kwargs):
         """获取当前任务列表
@@ -184,7 +250,7 @@ class ReminderBot(Wechaty):
         for i, job in enumerate(all_jobs, start=1):
             txt += (
                 f"{'-' * 25}\n"
-                f"ID:{job.id}\n"
+                f"ID:{job.job_id}\n"
                 f"下一次执行时间:\n{TimeUtil.timestamp2datetime(job.next_run_time)}\n"
                 f"内容:{job.remind_msg}\n"
             )
@@ -201,7 +267,7 @@ class ReminderBot(Wechaty):
         remind_msg = ", ".join([remind_msg, *remind_left])
         next_run_time, schedule_info = self.ner.extract_time(given_time)
         job = ScheduleJobDao.create_job(
-            room_id=room.payload.topic,
+            room=room.payload.topic,
             next_run_time=next_run_time,
             remind_msg=remind_msg,
             schedule_info=schedule_info,
@@ -209,7 +275,7 @@ class ReminderBot(Wechaty):
         assert job, "任务失败, 请重试"
         await room.say(
             f"任务已创建\n"
-            f"ID:{job.id}\n"
+            f"ID:{job.job_id}\n"
             f"下一次执行时间:\n{TimeUtil.timestamp2datetime(next_run_time)}\n"
             f"内容:{remind_msg}\n"
         )
@@ -228,7 +294,7 @@ class ReminderBot(Wechaty):
             assert [int(j_id) for j_id in other_job_ids], "任务ID不合法"
 
         nrows = ScheduleJobDao.cancel_jobs(
-            job_id, *other_job_ids, room_id=room.payload.topic
+            job_id, *other_job_ids, room=room.payload.topic
         )
         assert nrows == len([job_id, *other_job_ids]), "任务失败, 请重试"
 
@@ -243,7 +309,7 @@ class ReminderBot(Wechaty):
         for i, job in enumerate(all_jobs, start=1):
             txt += (
                 f"{'-' * 25}\n"
-                f"{i}. ID:{job.id}\n"
+                f"{i}. ID:{job.job_id}\n"
                 f"下一次执行时间:\n{TimeUtil.timestamp2datetime(job.next_run_time)}\n"
                 f"内容:{job.remind_msg}\n"
             )
@@ -289,12 +355,14 @@ class ReminderBot(Wechaty):
             remind_msg = ", ".join(n_msg)
             _update.update(remind_msg=remind_msg)
 
-        nrow = ScheduleJobDao.update_job(job_id=int(job_id), **_update)
+        nrow = ScheduleJobDao.update_job(
+            job_id=int(job_id), room=room.payload.topic, **_update
+        )
         assert nrow, "没有这个ID, 任务失败, 请重试"
-        job = ScheduleJobDao.get_job(job_id=int(job_id), room_id=room.payload.topic)
+        job = ScheduleJobDao.get_job(job_id=int(job_id), room=room.payload.topic)
         await room.say(
             f"任务已更新\n"
-            f"ID:{job.id}\n"
+            f"ID:{job.job_id}\n"
             f"下一次执行时间:\n{TimeUtil.timestamp2datetime(job.next_run_time)}\n"
             f"内容:{job.remind_msg}\n"
         )

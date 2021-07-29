@@ -1,12 +1,23 @@
+import io
+import os
+import re
+import smtplib
 from datetime import datetime, timedelta
+from email.message import Message
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional, Union, Tuple
+
+import qrcode
+from dotenv import load_dotenv
 
 from logger import logger
 from ner.dtime.dtime import ZHDatetimeExtractor
-import re
-
-from ner.number import number_ext, ZHNumberExtractor
+from ner.number import ZHNumberExtractor
 from typevar import JobScheduleType
+
+load_dotenv()
 
 ScheduleRe = re.compile(
     r"每((?P<daily>天|一天|1天)|(?P<days>(.*)天)|(?P<weekly>周[1-6一二三四五六日天]?)|(?P<monthly>月|个月)|(?P<yearly>年|1年|一年))(?P<date>.*)"
@@ -164,3 +175,57 @@ class NerUtil:
             next_run_time = int(d_datetime.timestamp())
 
         return next_run_time, schedule_type.value
+
+
+class QRCode:
+    @staticmethod
+    def qr_code_img(data: str, version=None) -> bytes:
+        """
+        create qr_code
+        :param data: qrcode data
+        :param version:1-40 or None
+        :return:
+        """
+        qr = qrcode.QRCode(version)
+        qr.add_data(data)
+        if version:
+            qr.make()
+        else:
+            qr.make(fit=True)
+
+        img = qr.make_image(fill_color="black", back_color="white")
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr)
+        return img_byte_arr.getvalue()
+
+
+class Email:
+    @staticmethod
+    def construct_html(
+        img_data: bytes, *, subject: str = "Wxbot Login", to: str = None
+    ) -> MIMEMultipart:
+        if to is None:
+            to = os.getenv("MAIL_TO")
+        me = os.getenv("MAIL_USER")
+        assert all([to, me]), "mail info error"
+        msg = MIMEMultipart("related")
+        msg["Subject"] = subject
+        msg["From"] = me
+        msg["To"] = to
+        msg_str = """
+        <p>qrcode:</p>
+        <img src="cid:qrcode">
+        """
+        msg.attach(MIMEText(msg_str, "html", "utf8"))
+        img = MIMEImage(img_data)
+        img.add_header("Content-ID", "<qrcode>")
+        msg.attach(img)
+        return msg
+
+    @staticmethod
+    def send_email(msg: Message):
+        mail_user, mail_pass = os.getenv("MAIL_USER"), os.getenv("MAIL_PASS")
+        assert all([mail_user, mail_pass]), "mail info error"
+        with smtplib.SMTP_SSL("smtp.163.com", 994) as s:
+            s.login(os.getenv("MAIL_USER"), os.getenv("MAIL_PASS"))
+            s.send_message(msg)
