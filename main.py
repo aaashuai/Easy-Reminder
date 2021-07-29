@@ -101,9 +101,9 @@ class ReminderBot(Wechaty):
         schedule_info: Optional[str],
     ):
         logger.info(f"task failed, room:{room},job_id:{job_id},remind_msg:{remind_msg}")
-        print(await self.Room.find_all())
         reminder_room = await self.Room.find(RoomQueryFilter(topic=room))
         assert reminder_room, f"未找到群聊: {room}"
+        await reminder_room.ready()
         send_msg = (
             "任务超时, 应执行时间为:\n"
             f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
@@ -148,6 +148,7 @@ class ReminderBot(Wechaty):
         )
         reminder_room = await self.Room.find(RoomQueryFilter(topic=room))
         assert reminder_room, f"未找到群聊: {room}"
+        await reminder_room.ready()
         send_msg = (
             f"{TimeUtil.timestamp2datetime(current_run_time)}\n"
             f"内容:\n"
