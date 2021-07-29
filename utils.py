@@ -1,5 +1,6 @@
+import functools
+import inspect
 import io
-import os
 import re
 import smtplib
 from datetime import datetime, timedelta
@@ -10,14 +11,13 @@ from email.mime.text import MIMEText
 from typing import Optional, Union, Tuple
 
 import qrcode
-from dotenv import load_dotenv
 
 from logger import logger
 from ner.dtime.dtime import ZHDatetimeExtractor
 from ner.number import ZHNumberExtractor
+from settings import Config
 from typevar import JobScheduleType
 
-load_dotenv()
 
 ScheduleRe = re.compile(
     r"每((?P<daily>天|一天|1天)|(?P<days>(.*)天)|(?P<weekly>周[1-6一二三四五六日天]?)|(?P<monthly>月|个月)|(?P<yearly>年|1年|一年))(?P<date>.*)"
@@ -205,8 +205,8 @@ class Email:
         img_data: bytes, *, subject: str = "Wxbot Login", to: str = None
     ) -> MIMEMultipart:
         if to is None:
-            to = os.getenv("MAIL_TO")
-        me = os.getenv("MAIL_USER")
+            to = Config.MAIL_TO
+        me = Config.MAIL_USER
         assert all([to, me]), "mail info error"
         msg = MIMEMultipart("related")
         msg["Subject"] = subject
@@ -224,8 +224,47 @@ class Email:
 
     @staticmethod
     def send_email(msg: Message):
-        mail_user, mail_pass = os.getenv("MAIL_USER"), os.getenv("MAIL_PASS")
+        mail_user, mail_pass = Config.MAIL_USER, Config.MAIL_PASS
         assert all([mail_user, mail_pass]), "mail info error"
         with smtplib.SMTP_SSL("smtp.163.com", 994) as s:
-            s.login(os.getenv("MAIL_USER"), os.getenv("MAIL_PASS"))
+            s.login(Config.MAIL_USER, Config.MAIL_PASS)
             s.send_message(msg)
+
+
+class Decorator:
+    def __init__(self, sign: str):
+        self.sign = sign
+
+    def _decorator(self, fn, cmd):
+        setattr(fn, self.sign, cmd)
+
+        if inspect.iscoroutinefunction(fn):
+            @functools.wraps(fn)
+            async def wrapper(*args, **kwargs):
+                return await fn(*args, **kwargs)
+        else:
+            @functools.wraps(fn)
+            def wrapper(*args, **kwargs):
+                return fn(*args, **kwargs)
+
+        return wrapper
+
+    def __call__(self, arg):
+        cmd = arg if isinstance(arg, str) else arg.__name__
+        if inspect.isfunction(arg):
+            return self._decorator(arg, cmd)
+        return functools.partial(self._decorator, cmd=arg)
+
+    def get_members(self, target) -> dict:
+        ret = {}
+        for _, method in inspect.getmembers(
+            target, predicate=inspect.isfunction
+        ):
+            cmd = getattr(method, self.sign, None)
+            if cmd:
+                ret[cmd] = method
+        return ret
+
+
+r_command = Decorator(sign="__command__")
+r_template = Decorator(sign="__template__")
