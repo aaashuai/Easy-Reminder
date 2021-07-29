@@ -136,9 +136,7 @@ class ReminderBot(Wechaty):
 
         # todo use docker to run wechaty
         def restart_pi_wechaty():
-            os.system(
-                "rm /home/ubuntu/projects/wechaty/python-wechaty-l.memory-card.json"
-            )
+            os.system("bash /home/ubuntu/projects/wechaty/shutdown.sh")
             os.system("supervisorctl restart wechaty")
 
         try:
