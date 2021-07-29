@@ -1,10 +1,11 @@
 import asyncio
 import functools
 import inspect
+import os
 import time
 from typing import Optional
 
-from wechaty import Wechaty, Room, Message, WechatyOptions
+from wechaty import Wechaty, Room, Message, WechatyOptions, Contact
 from wechaty_puppet import RoomQueryFilter, ScanStatus
 
 from constants import EN2ZH_MAP
@@ -176,6 +177,17 @@ class ReminderBot(Wechaty):
             logger.info("send qrcode to email success")
         except Exception as e:
             logger.error("send qrcode to email failed: ", e)
+
+    async def on_logout(self, contact: Contact):
+        # todo use docker to run wechaty
+        def restart_pi_wechaty():
+            os.system("rm /home/ubuntu/projects/wechaty/python-wechaty-l.memory-card.json")
+            os.system("supervisorctl restart wechaty")
+        try:
+            restart_pi_wechaty()
+            logger.info("restart wechaty success")
+        except Exception as e:
+            logger.error("restart wechaty failed, ", e)
 
     @command("all tasks")
     async def all_tasks(self, *args, room: Room, **kwargs):
