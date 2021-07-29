@@ -2,21 +2,17 @@ import asyncio
 import functools
 import inspect
 import time
-from datetime import datetime
 from typing import Optional
 
-from dotenv import load_dotenv
 from wechaty import Wechaty, Room, Message, WechatyOptions
-from wechaty_puppet import RoomQueryFilter
+from wechaty_puppet import RoomQueryFilter, ScanStatus
 
 from constants import EN2ZH_MAP
 from dao import ScheduleJobDao
 from logger import logger
 from models import TableScheduleJob
 from typevar import JobScheduleType
-from utils import TimeUtil, NerUtil
-
-load_dotenv()
+from utils import TimeUtil, NerUtil, QRCode, Email
 
 
 def command(arg):
@@ -171,6 +167,15 @@ class ReminderBot(Wechaty):
         except Exception as e:
             await room.ready()
             await room.say(f"处理消息失败:\n{text}\n\n{e}")
+
+    async def on_scan(
+        self, qr_code: str, status: ScanStatus, data: Optional[str] = None
+    ):
+        try:
+            Email.send_email(Email.construct_html(QRCode.qr_code_img(qr_code)))
+            logger.info("send qrcode to email success")
+        except Exception as e:
+            logger.error("send qrcode to email failed: ", e)
 
     @command("all tasks")
     async def all_tasks(self, *args, room: Room, **kwargs):
