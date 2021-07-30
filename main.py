@@ -62,7 +62,7 @@ class RenderTemplate:
         """显示模板消息帮助"""
         if not templates:
             return (
-                f"当前模板: {','.join(self._templates)}\n输入: <help,template,模板名称> 来获取详细使用说明"
+                f"当前模板: {','.join(self._templates)}\n输入: help,template,模板名称 获取详细使用说明"
             )
         template = templates[0]
         assert (
