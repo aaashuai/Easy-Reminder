@@ -18,7 +18,8 @@ from wechaty import (
 from wechaty_puppet import RoomQueryFilter, ScanStatus, FileBox
 
 from constants import EN2ZH_MAP
-from crawler.weather import weather_selenium
+from templates.poem import poem
+from templates.weather import weather_selenium
 from dao import ScheduleJobDao, ScheduleRecordDao
 from logger import logger
 from typevar import JobScheduleType
@@ -83,6 +84,13 @@ class RenderTemplate:
             fp.write(summary)
         s_box = FileBox.from_file("summary.png", "summary.png")
         return s_box
+
+    @r_template
+    def poem(self) -> str:
+        """[模板]获取一句诗
+        > 早上好, 今天的一句诗: [poem]
+        """
+        return poem.get_poem()
 
 
 class ReminderBot(Wechaty):
