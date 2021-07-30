@@ -6,7 +6,15 @@ import time
 from collections import Iterable
 from typing import Optional, Union
 
-from wechaty import Wechaty, Room, Message, WechatyOptions, Contact, MiniProgram, UrlLink
+from wechaty import (
+    Wechaty,
+    Room,
+    Message,
+    WechatyOptions,
+    Contact,
+    MiniProgram,
+    UrlLink,
+)
 from wechaty_puppet import RoomQueryFilter, ScanStatus, FileBox
 
 from constants import EN2ZH_MAP
@@ -21,6 +29,7 @@ class RenderTemplate:
     """模板渲染
     你好, [weather:北京]
     """
+
     def __init__(self):
         self._templates = r_template.get_members(RenderTemplate)
         self.re = re.compile(r"[\[](.*?)[\]]", re.S)
@@ -49,9 +58,13 @@ class RenderTemplate:
         msg, others = self._parse(msg)
         return [msg, *others]
 
-    def show_help(self, template: str):
-        """显示模板消息帮助
-        """
+    def show_help(self, *templates: str):
+        """显示模板消息帮助"""
+        if not templates:
+            return (
+                f"当前模板: {','.join(self._templates)}\n输入: <help,template,模板名称> 来获取详细使用说明"
+            )
+        template = templates[0]
         assert (
             template in self._templates
         ), f"无此模板: {template}\n当前支持模板:\n{', '.join(self._templates)}"
@@ -60,8 +73,8 @@ class RenderTemplate:
     @r_template
     def weather(self, *args) -> FileBox:
         """[模板]获取某城市天气
-        > [weather:朝阳:北京]
-        > [weather:北京]
+        > 早上好, [weather:朝阳:北京]
+        > 早上好, [weather:北京]
         """
         location, *adm = args
         adm = adm[0] if adm else None
@@ -83,14 +96,18 @@ class ReminderBot(Wechaty):
     def render_msg(self, msg: str) -> list:
         return self._render_template.render(msg)
 
-    async def render(self, room: Room, send_msg: Union[str, Contact, FileBox, MiniProgram, UrlLink]):
+    async def render(
+        self, room: Room, send_msg: Union[str, Contact, FileBox, MiniProgram, UrlLink]
+    ):
         await room.ready()
         msgs = self.render_msg(send_msg)
         for msg in msgs:
             await room.say(msg)
 
     @staticmethod
-    async def say(room: Room, send_msg: Union[str, Contact, FileBox, MiniProgram, UrlLink]):
+    async def say(
+        room: Room, send_msg: Union[str, Contact, FileBox, MiniProgram, UrlLink]
+    ):
         await room.ready()
         await room.say(send_msg)
 
@@ -364,11 +381,14 @@ class ReminderBot(Wechaty):
         > help,remind
         """
         cmd, *other_args = args
-        assert (
-            cmd in {*self._commands, "template"}  # todo 有没有更优雅的形式
-        ), f"无此命令: {cmd}\n当前支持命令:\n{', '.join([*self._commands, 'template'])}"
+        assert cmd in {
+            *self._commands,
+            "template",
+        }, (  # todo 有没有更优雅的形式
+            f"无此命令: {cmd}\n当前支持命令:\n{', '.join([*self._commands, 'template'])}"
+        )
         if cmd == "template":
-            docs = self._render_template.show_help(other_args[0])
+            docs = self._render_template.show_help(*other_args)
         else:
             docs = self._commands[cmd].__doc__
 
