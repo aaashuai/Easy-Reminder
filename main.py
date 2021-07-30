@@ -101,6 +101,14 @@ class ReminderBot(Wechaty):
         self.ner = NerUtil()
         self.login = False
 
+    @property
+    def supported_cmds(self):
+        return [*self._commands, "template"]
+
+    @property
+    def supported_cmds_str(self) -> str:
+        return ", ".join(self.supported_cmds)
+
     def render_msg(self, msg: str) -> list:
         return self._render_template.render(msg)
 
@@ -132,8 +140,12 @@ class ReminderBot(Wechaty):
         if room is None or msg.is_self():
             return
 
+        # /开头的是命令
+        if not text.strip().startswith("/"):
+            return
+
         try:
-            cmd, *args = text.translate(EN2ZH_MAP).split(",")
+            cmd, *args = text[1:].translate(EN2ZH_MAP).split(",")
             if cmd in self._commands:
                 func = self._commands[cmd]
                 if inspect.iscoroutinefunction(func):
@@ -307,11 +319,11 @@ class ReminderBot(Wechaty):
     @r_command("all tasks")
     async def all_tasks(self, *args, room: Room, **kwargs):
         """获取当前任务列表
-        > all tasks
+        > /all tasks
         """
         job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.payload.topic)
         if not job_count:
-            return await self.say(room, "当前无生效任务\n请通过 [ remind,日期,提醒内容 ] 进行创建")
+            return await self.say(room, "当前无生效任务\n请通过 [ /remind,日期,提醒内容 ] 进行创建")
 
         txt = f"当前共有{job_count}条任务: \n"
         for i, job in enumerate(all_jobs, start=1):
@@ -326,9 +338,9 @@ class ReminderBot(Wechaty):
     @r_command
     async def remind(self, *args, room: Room, **kwargs):
         """创建一条提醒记录
-        > remind,提醒时间,提醒内容
+        > /remind,提醒时间,提醒内容
         例:
-        > remind,明天上午11点,吃东西
+        > /remind,明天上午11点,吃东西
         """
         given_time, remind_msg, *remind_left = args
         remind_msg = ", ".join([remind_msg, *remind_left])
@@ -351,10 +363,10 @@ class ReminderBot(Wechaty):
     @r_command
     async def cancel(self, *args, room: Room, **kwargs):
         """取消一条任务/多条任务
-        > cancel,id[,id2...]
+        > /cancel,id[,id2...]
         例:
-        > cancel,12
-        > cancel,12,13,14
+        > /cancel,12
+        > /cancel,12,13,14
         """
         job_id, *other_job_ids = args
         assert int(job_id), "任务ID不合法"
@@ -370,7 +382,7 @@ class ReminderBot(Wechaty):
 
         job_count, all_jobs = ScheduleJobDao.get_all_jobs(room.payload.topic)
         if not job_count:
-            txt += "当前已无生效任务\n请通过 [ remind,日期,提醒内容 ] 进行创建"
+            txt += "当前已无生效任务\n请通过 [ /remind,日期,提醒内容 ] 进行创建"
             return await self.say(room, txt)
 
         txt += f"当前还有{job_count}条任务:\n"
@@ -386,15 +398,10 @@ class ReminderBot(Wechaty):
     @r_command("help")
     async def show_help(self, *args, room: Room, **kwargs):
         """显示某命令使用方法
-        > help,remind
+        > /help,remind
         """
         cmd, *other_args = args
-        assert cmd in {
-            *self._commands,
-            "template",
-        }, (  # todo 有没有更优雅的形式
-            f"无此命令: {cmd}\n当前支持命令:\n{', '.join([*self._commands, 'template'])}"
-        )
+        assert cmd in self.supported_cmds, f"无此命令: {cmd}\n当前支持命令:\n{self.supported_cmds_str}"
         if cmd == "template":
             docs = self._render_template.show_help(*other_args)
         else:
@@ -405,17 +412,17 @@ class ReminderBot(Wechaty):
     @r_command("room info")
     async def show_room_info(self, *args, room: Room, **kwargs):
         """获取当前群聊信息
-        > room info
+        > /room info
         """
         await self.say(room, f"Topic: {room.payload.topic}\n" f"Id: {room.room_id}")
 
     @r_command
     async def update(self, *args, room: Room, **kwargs):
         """更新某个任务
-        > update,id,时间,内容 (m:id, o:时间, o:内容)
-        > update,12,明天上午9点,吃东西
-        > update,12,,吃东西
-        > update,12,后天上午9点,
+        > /update,id,时间,内容 (m:id, o:时间, o:内容)
+        > /update,12,明天上午9点,吃东西
+        > /update,12,,吃东西
+        > /update,12,后天上午9点,
         """
         job_id, n_time, *n_msg = args
         assert job_id and int(job_id), "请填写正确的ID"
