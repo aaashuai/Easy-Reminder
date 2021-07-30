@@ -33,7 +33,7 @@ class RenderTemplate:
             pre, _next = msg.split(match_msg)
             template, *args = match_msg[1:-1].split(":")
             if template in self._templates:
-                res = self._templates[template](*args)
+                res = self._templates[template](self, *args)
                 if isinstance(res, str):
                     msg = "".join([pre, res, _next])
                     continue
