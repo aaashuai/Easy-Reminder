@@ -21,4 +21,4 @@
 ## Thanks
 
 [![PyCharm](https://github.com/dongweiming/lyanna/raw/master/docs/pycharm.svg)](https://www.jetbrains.com/?from=easy_wechaty_reminder)
-<img src="https://camo.githubusercontent.com/8663c7fa27f9849e4002ca4d8f4b032c420e0ecce53757c2f6c1859a250561ee/68747470733a2f2f776563686174792e6a732e6f72672f696d672f776563686174792d6c6f676f2e737667" width="455px" height="128px" alt="wechaty" />
+<a href="https://wechaty.js.org/"><img src="https://camo.githubusercontent.com/8663c7fa27f9849e4002ca4d8f4b032c420e0ecce53757c2f6c1859a250561ee/68747470733a2f2f776563686174792e6a732e6f72672f696d672f776563686174792d6c6f676f2e737667" width="455px" height="128px" alt="wechaty" /></a>
