@@ -15,7 +15,12 @@ from wechaty import (
     MiniProgram,
     UrlLink,
 )
-from wechaty_puppet import RoomQueryFilter, ScanStatus, FileBox
+from wechaty_puppet import (
+    RoomQueryFilter,
+    ScanStatus,
+    FileBox,
+    EventErrorPayload,
+)
 
 from constants import EN2ZH_MAP
 from templates.poem import poem
@@ -62,9 +67,7 @@ class RenderTemplate:
     def show_help(self, *templates: str):
         """显示模板消息帮助"""
         if not templates:
-            return (
-                f"当前模板: {','.join(self._templates)}\n输入: help,template,模板名称 获取详细使用说明"
-            )
+            return f"当前模板: {','.join(self._templates)}\n输入: help,template,模板名称 获取详细使用说明"
         template = templates[0]
         assert (
             template in self._templates
@@ -127,11 +130,42 @@ class ReminderBot(Wechaty):
         await room.ready()
         await room.say(send_msg)
 
+    async def on_scan(
+        self, qr_code: str, status: ScanStatus, data: Optional[str] = None
+    ):
+        try:
+            Email.send_email(Email.construct_html(QRCode.qr_code_img(qr_code)))
+            logger.info("send qrcode to email success")
+        except Exception as e:
+            logger.error("send qrcode to email failed: ", e)
+
     async def on_login(self, contact: Contact):
         await asyncio.sleep(3)
         logger.info("login success")
         self.login = True
         asyncio.create_task(self._run_schedule_task())
+
+    async def on_error(self, payload: EventErrorPayload):
+        logger.error(f"wechaty error: {payload}")
+        self._restart_wechaty()
+
+    async def on_logout(self, contact: Contact):
+        logger.warning(f"wechaty logout: {contact}")
+        self._restart_wechaty()
+
+    def _restart_wechaty(self):
+        self.login = False
+
+        # todo use docker to run wechaty
+        def restart_pi_wechaty():
+            os.system("bash /home/ubuntu/projects/wechaty/shutdown.sh")
+            os.system("supervisorctl restart wechaty")
+
+        try:
+            restart_pi_wechaty()
+            logger.info("restart wechaty success")
+        except Exception as e:
+            logger.error("restart wechaty failed, ", e)
 
     async def on_message(self, msg: Message):
         text = msg.text()
@@ -158,29 +192,6 @@ class ReminderBot(Wechaty):
                 )
         except Exception as e:
             await self.say(room, f"处理消息失败:\n{text}\n\n{e}")
-
-    async def on_scan(
-        self, qr_code: str, status: ScanStatus, data: Optional[str] = None
-    ):
-        try:
-            Email.send_email(Email.construct_html(QRCode.qr_code_img(qr_code)))
-            logger.info("send qrcode to email success")
-        except Exception as e:
-            logger.error("send qrcode to email failed: ", e)
-
-    async def on_logout(self, contact: Contact):
-        self.login = False
-
-        # todo use docker to run wechaty
-        def restart_pi_wechaty():
-            os.system("bash /home/ubuntu/projects/wechaty/shutdown.sh")
-            os.system("supervisorctl restart wechaty")
-
-        try:
-            restart_pi_wechaty()
-            logger.info("restart wechaty success")
-        except Exception as e:
-            logger.error("restart wechaty failed, ", e)
 
     async def _run_schedule_task(self):
         while True:
@@ -251,17 +262,17 @@ class ReminderBot(Wechaty):
                 time_diff = int(schedule_info) * 24 * 60 * 60
             else:
                 time_diff = JobScheduleType.get_type(schedule_info).timestamp2now()
-            next_run_time = current_run_time + time_diff
-            if next_run_time > now_time:
+            current_run_time = current_run_time + time_diff
+            if current_run_time > now_time:
                 break
 
         ScheduleJobDao.update_job(
             job_id=job_id,
             room=room,
-            next_run_time=next_run_time,
+            next_run_time=current_run_time,
             remind_msg=remind_msg,
         )
-        return next_run_time
+        return current_run_time
 
     async def _remind_schedule(
         self,
@@ -302,7 +313,6 @@ class ReminderBot(Wechaty):
         )
         reminder_room = await self.Room.find(RoomQueryFilter(topic=room))
         assert reminder_room, f"未找到群聊: {room}"
-        await reminder_room.ready()
         ScheduleRecordDao.create_record(job_id, remind_msg)
         if not schedule_info:
             return await self._remind_once(job_id, room, reminder_room, send_msg)
@@ -401,7 +411,9 @@ class ReminderBot(Wechaty):
         > /help,remind
         """
         cmd, *other_args = args
-        assert cmd in self.supported_cmds, f"无此命令: {cmd}\n当前支持命令:\n{self.supported_cmds_str}"
+        assert (
+            cmd in self.supported_cmds
+        ), f"无此命令: {cmd}\n当前支持命令:\n{self.supported_cmds_str}"
         if cmd == "template":
             docs = self._render_template.show_help(*other_args)
         else:
